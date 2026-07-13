@@ -217,7 +217,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-<<<<<<< Updated upstream
 # Node / Frontend
 **/node_modules/
 **/npm-debug.log*
@@ -230,6 +229,5 @@ __marimo__/
 # Production build output
 **/frontend/build/
 **/frontend/dist/
-=======
+
 .idea/
->>>>>>> Stashed changes
