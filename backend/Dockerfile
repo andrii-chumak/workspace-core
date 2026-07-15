@@ -7,7 +7,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends netcat-openbsd && rm -rf /var/lib/apt/lists/*
-RUN pip install poetry
+RUN pip install --no-cache-dir poetry
 
 COPY pyproject.toml poetry.lock ./
 RUN poetry install --no-root
