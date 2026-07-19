@@ -7,6 +7,6 @@ class User(AbstractUser):
     # решта полів - вбудовані у AbstractUser
 
     class Meta:
-        db_table = "User"
+        db_table = "users"
 
 
