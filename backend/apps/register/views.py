@@ -1,10 +1,12 @@
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
+from .services import generate_email_verification_token, verify_email_verification_token, send_verification_email
+
 
 
 from django.contrib.auth import get_user_model
-from .serializers import RegisterSerializer
+from .serializers import RegisterSerializer, CheckEmailSerializer
 
 class RegisterView(APIView):
 
@@ -18,14 +20,49 @@ class RegisterView(APIView):
 
 User = get_user_model()
 
+
+
 class CheckEmailView(APIView):
     def get(self, request):
-        email = request.query_params.get("email")
-        if not email:
+        serializer = CheckEmailSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"]
+
+        exists = User.objects.filter(email__iexact=email).exists()
+
+        if not exists:
+            token = generate_email_verification_token(email)
+            send_verification_email(email, token)
+
+        return Response({
+            "exists": exists,
+            "available": not exists,
+            })
+
+
+class VerifyEmailView(APIView):
+    def get(self, request):
+        token = request.query_params.get("token")
+        if token is None:
             return Response(
-                {"detail": "email parameter is required"},
+                {"detail": "Token is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        is_taken = User.objects.filter(email__iexact=email).exists()
-        return Response({"available": not is_taken})
+
+        email = verify_email_verification_token(token)
+
+        if email is None:
+            return Response(
+                {"detail": "invalid or expired token"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        return Response({
+            "verified": True,
+            "email": email,
+            "token": token,
+            "message": "Email verified successfully."
+            }, status=status.HTTP_200_OK
+        )
 
