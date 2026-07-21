@@ -17,7 +17,7 @@ def verify_email_verification_token(token, max_age_in_seconds=60*15):
 def send_verification_email(email, token):
 
     link = (
-        f"http://localhost:8000/auth/verify-email/"
+        f"http://localhost:8000/api/auth/verify-email/"
         f"?token={token}"
     )
 
