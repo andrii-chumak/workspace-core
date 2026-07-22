@@ -52,8 +52,8 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'corsheaders',
     'apps.register',
-    'apps.docs'
     'apps.login',
+    'apps.docs'
 ]
 
 MIDDLEWARE = [
@@ -143,6 +143,7 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API Service description',
     'VERSION': '1.0.0',
     'SERVICE_INCLUDE_SCHEMA': False,
+}
 
 AUTHENTICATION_BACKENDS = [
     'apps.login.backends.EmailOrUsernameModelBackend',
@@ -173,6 +174,6 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
-    ]
+    ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
