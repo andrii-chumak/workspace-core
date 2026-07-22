@@ -49,8 +49,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_spectacular',
     'corsheaders',
     'apps.register',
+    'apps.docs'
     'apps.login',
 ]
 
@@ -136,6 +138,12 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'API Service',
+    'DESCRIPTION': 'API Service description',
+    'VERSION': '1.0.0',
+    'SERVICE_INCLUDE_SCHEMA': False,
+
 AUTHENTICATION_BACKENDS = [
     'apps.login.backends.EmailOrUsernameModelBackend',
     'django.contrib.auth.backends.ModelBackend',
@@ -166,4 +174,5 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ]
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
