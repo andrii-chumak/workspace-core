@@ -6,6 +6,8 @@ __pycache__/
 # C extensions
 *.so
 
+backend/.coverage
+
 #env_file
 backend/.env
 .env
