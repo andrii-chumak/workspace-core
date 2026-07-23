@@ -4,8 +4,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth import password_validation
 from django.db import IntegrityError
 
-from models import SocialAccount
-from .services import verify_email_verification_token, verify_google_token
+from .models import SocialAccount
+from .services import verify_email_verification_token, verify_google_token, generate_unique_username
 
 User = get_user_model()
 
@@ -99,44 +99,40 @@ class GoogleRegisterSerializer(serializers.Serializer):
         email = payload["email"]
         given_name = payload.get("given_name", "")
         family_name = payload.get("family_name", "")
+        picture = payload.get("picture", "")
         provider_user_id = payload["sub"]
 
+        # Перевірка чи Google вже прив'язаний
+        social_account = SocialAccount.objects.filter(
+            provider=SocialAccount.Provider.GOOGLE,
+            provider_user_id=provider_user_id,
+        ).select_related("user").first()
+
+        if social_account:
+            self.action = "login_required"
+            return social_account.user  # "логін"
+
+        # Шукаємо User за email
         user = User.objects.filter(email__iexact=email).first()
 
-        # Якщо користувача немає
         if user is None:
-            username = email.split("@")[0]
-            original_username = username
-            counter = 1
-
-            while User.objects.filter(username=username).exists():
-                username = f"{original_username}{counter}"
-                counter += 1
+            username = generate_unique_username(email)
 
             user = User.objects.create_user(
                 username=username,
                 email=email,
                 first_name=given_name,
                 last_name=family_name,
+                avatar_url=picture,
             )
-
             user.set_unusable_password()
             user.save(update_fields=["password"])
 
+            self.action = "registered"
+        else:
+            self.action = "linked"
 
-        # Якщо Google вже прив'язаний
-        social_account = SocialAccount.objects.filter(
-            provider=SocialAccount.Provider.GOOGLE,
-            provider_user_id=provider_user_id,
-        ).first()
-
-        if social_account:
-            raise serializers.ValidationError({
-                "action": "login",
-                "detail": "Google account already linked."
-            })
-
-        # Якщо користувач є, але Google ще не прив'язаний
+        # Прив'язуємо SocialAccount
         try:
             SocialAccount.objects.create(
                 user=user,
@@ -144,9 +140,6 @@ class GoogleRegisterSerializer(serializers.Serializer):
                 provider_user_id=provider_user_id,
             )
         except IntegrityError:
-            raise serializers.ValidationError({
-                "action": "login",
-                "detail": "Google account already linked."
-            })
+            pass  # race condition
 
         return user
