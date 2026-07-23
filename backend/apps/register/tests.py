@@ -3,8 +3,11 @@ from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
 from unittest.mock import patch
-
-from .services import generate_email_verification_token
+from .models import SocialAccount
+from .services import generate_email_verification_token, verify_google_token, generate_unique_username
+from django.db import IntegrityError
+from .serializers import RegisterSerializer
+from rest_framework import serializers
 
 User = get_user_model()
 
@@ -166,6 +169,67 @@ class RegisterViewTests(APITestCase):
         self.assertIn("email", response.data)
 
 
+class RegisterSerializerTests(APITestCase):
+
+    @patch("apps.register.serializers.User.objects.create_user")
+    def test_register_integrity_error(
+        self,
+        mock_create,
+    ):
+        email = "test@test.com"
+
+        token = generate_email_verification_token(
+            email
+        )
+
+        serializer = RegisterSerializer(
+            data={
+                "username": "john",
+                "password": "Password123!",
+                "verification_token": token,
+            }
+        )
+
+        self.assertTrue(
+            serializer.is_valid()
+        )
+
+        mock_create.side_effect = IntegrityError()
+
+        with self.assertRaises(serializers.ValidationError):
+            serializer.save()
+
+
+
+    def test_serializer_duplicate_username(self):
+
+        User.objects.create_user(
+            username="john",
+            email="other@test.com",
+            password="Password123!",
+        )
+
+        token = generate_email_verification_token(
+            "new@test.com"
+        )
+
+        serializer = RegisterSerializer(
+            data={
+                "username": "john",
+                "password": "Password123!",
+                "verification_token": token,
+            }
+        )
+
+        self.assertFalse(
+            serializer.is_valid()
+        )
+
+        self.assertIn(
+            "username",
+            serializer.errors,
+        )
+
 
 class CheckEmailViewTests(APITestCase):
     def setUp(self):
@@ -224,6 +288,7 @@ class CheckEmailViewTests(APITestCase):
         args, kwargs = mock_send_email.call_args
 
         self.assertEqual(args[0], email)
+
 
 class VerifyEmailViewTests(APITestCase):
 
@@ -312,3 +377,338 @@ class VerifyEmailViewTests(APITestCase):
             response.data["email"],
             self.email
         )
+
+
+class GoogleRegisterViewTests(APITestCase):
+
+    def setUp(self):
+        self.url = reverse("google-register")
+
+        self.payload = {
+            "sub": "google-user-123",
+            "email": "google@example.com",
+            "email_verified": True,
+            "given_name": "John",
+            "family_name": "Doe",
+            "picture": "https://example.com/avatar.png",
+        }
+
+    @patch("apps.register.views.send_welcome_email")
+    @patch("apps.register.serializers.verify_google_token")
+    def test_google_register_new_user(
+            self,
+            mock_verify,
+            mock_send_email,
+    ):
+        mock_verify.return_value = self.payload
+
+        response = self.client.post(
+            self.url,
+            {"google_token": "valid-token"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        self.assertEqual(
+            response.data["action"],
+            "registered",
+        )
+
+        self.assertTrue(
+            User.objects.filter(
+                email=self.payload["email"]
+            ).exists()
+        )
+
+        mock_send_email.assert_called_once()
+
+    @patch("apps.register.serializers.verify_google_token")
+    def test_google_password_is_unusable(
+            self,
+            mock_verify,
+    ):
+        mock_verify.return_value = self.payload
+
+        self.client.post(
+            self.url,
+            {"google_token": "token"},
+        )
+
+        user = User.objects.get(email=self.payload["email"])
+
+        self.assertFalse(
+            user.has_usable_password()
+        )
+
+    @patch("apps.register.serializers.verify_google_token")
+    def test_google_avatar_saved(
+            self,
+            mock_verify,
+    ):
+        mock_verify.return_value = self.payload
+
+        self.client.post(
+            self.url,
+            {"google_token": "token"},
+        )
+
+        user = User.objects.get(email=self.payload["email"])
+
+        self.assertEqual(
+            user.avatar_url,
+            self.payload["picture"],
+        )
+
+    @patch("apps.register.views.send_welcome_email")
+    @patch("apps.register.serializers.verify_google_token")
+    def test_google_account_already_linked(
+            self,
+            mock_verify,
+            mock_send_email,
+    ):
+        user = User.objects.create_user(
+            username="john",
+            email=self.payload["email"],
+        )
+
+        SocialAccount.objects.create(
+            user=user,
+            provider=SocialAccount.Provider.GOOGLE,
+            provider_user_id=self.payload["sub"],
+        )
+
+        mock_verify.return_value = self.payload
+
+        response = self.client.post(
+            self.url,
+            {"google_token": "token"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["action"],
+            "login_required",
+        )
+
+        mock_send_email.assert_not_called()
+
+    @patch("apps.register.views.send_welcome_email")
+    @patch("apps.register.serializers.verify_google_token")
+    def test_link_google_to_existing_user(
+            self,
+            mock_verify,
+            mock_send_email,
+    ):
+        user = User.objects.create_user(
+            username="john",
+            email=self.payload["email"],
+            password="Password123!",
+        )
+
+        mock_verify.return_value = self.payload
+
+        response = self.client.post(
+            self.url,
+            {"google_token": "token"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        self.assertEqual(
+            response.data["action"],
+            "linked",
+        )
+
+        self.assertTrue(
+            SocialAccount.objects.filter(
+                user=user,
+                provider=SocialAccount.Provider.GOOGLE,
+            ).exists()
+        )
+
+        mock_send_email.assert_not_called()
+
+    @patch("apps.register.serializers.verify_google_token")
+    def test_invalid_google_token(
+            self,
+            mock_verify,
+    ):
+        mock_verify.return_value = None
+
+        response = self.client.post(
+            self.url,
+            {"google_token": "invalid"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    @patch("apps.register.services.id_token.verify_oauth2_token")
+    def test_verify_google_token_unverified_email(
+            self,
+            mock_verify,
+    ):
+        mock_verify.return_value = {
+            "sub": "123",
+            "email": "test@test.com",
+            "email_verified": False,
+        }
+
+        result = verify_google_token("token")
+
+        self.assertIsNone(result)
+
+    @patch("apps.register.serializers.verify_google_token")
+    def test_google_returns_access_token(
+            self,
+            mock_verify,
+    ):
+        mock_verify.return_value = self.payload
+
+        response = self.client.post(
+            self.url,
+            {"google_token": "token"},
+        )
+
+        self.assertIn(
+            "access",
+            response.data,
+        )
+
+    @patch("apps.register.serializers.verify_google_token")
+    def test_google_returns_refresh_token(
+            self,
+            mock_verify,
+    ):
+        mock_verify.return_value = self.payload
+
+        response = self.client.post(
+            self.url,
+            {"google_token": "token"},
+        )
+
+        self.assertIn(
+            "refresh",
+            response.data,
+        )
+
+    @patch("apps.register.serializers.verify_google_token")
+    def test_google_generates_username(
+            self,
+            mock_verify,
+    ):
+        mock_verify.return_value = self.payload
+
+        self.client.post(
+            self.url,
+            {"google_token": "token"},
+        )
+
+        user = User.objects.get(email=self.payload["email"])
+
+        self.assertTrue(user.username)
+
+    @patch("apps.register.serializers.verify_google_token")
+    def test_google_returns_user_data(
+            self,
+            mock_verify,
+    ):
+        mock_verify.return_value = self.payload
+
+        response = self.client.post(
+            self.url,
+            {"google_token": "token"},
+        )
+
+        self.assertEqual(
+            response.data["user"]["email"],
+            self.payload["email"],
+        )
+
+        self.assertEqual(
+            response.data["user"]["first_name"],
+            self.payload["given_name"],
+        )
+
+        self.assertEqual(
+            response.data["user"]["last_name"],
+            self.payload["family_name"],
+        )
+
+    @patch("apps.register.serializers.SocialAccount.objects.create")
+    @patch("apps.register.serializers.verify_google_token")
+    def test_google_social_account_race_condition(
+            self,
+            mock_verify,
+            mock_create,
+    ):
+        mock_verify.return_value = self.payload
+        mock_create.side_effect = IntegrityError()
+
+        response = self.client.post(
+            self.url,
+            {"google_token": "token"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        self.assertTrue(
+            User.objects.filter(
+                email=self.payload["email"],
+            ).exists()
+        )
+        
+class UsernameGenerationTests(APITestCase):
+
+    def test_generate_unique_username_with_duplicates(self):
+        User.objects.create_user(
+            username="john",
+            email="john1@test.com",
+        )
+
+        User.objects.create_user(
+            username="john1",
+            email="john2@test.com",
+        )
+
+        username = generate_unique_username(
+            "john@gmail.com"
+        )
+
+        self.assertEqual(
+            username,
+            "john2",
+        )
+
+
+class GoogleTokenServiceTests(APITestCase):
+
+    @patch("apps.register.services.id_token.verify_oauth2_token")
+    def test_verify_google_token_invalid(
+        self,
+        mock_verify,
+    ):
+        mock_verify.side_effect = ValueError()
+
+        result = verify_google_token(
+            "invalid-token"
+        )
+
+        self.assertIsNone(result)
+
+
