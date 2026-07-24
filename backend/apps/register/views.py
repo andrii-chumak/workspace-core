@@ -1,21 +1,27 @@
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
-from .services import generate_email_verification_token, verify_email_verification_token, send_verification_email
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from .services import generate_email_verification_token, verify_email_verification_token, send_verification_email, send_welcome_email
 
 
 
 from django.contrib.auth import get_user_model
-from .serializers import RegisterSerializer, CheckEmailSerializer
+from .serializers import RegisterSerializer, CheckEmailSerializer, GoogleAuthSerializer
 
 class RegisterView(APIView):
-
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.save()
+        send_welcome_email(user)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 User = get_user_model()
@@ -65,4 +71,31 @@ class VerifyEmailView(APIView):
             "message": "Email verified successfully."
             }, status=status.HTTP_200_OK
         )
+
+class GoogleAuthView(APIView):
+    def post(self, request):
+        serializer = GoogleAuthSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        action = serializer.action
+
+        if action == "registered":
+            send_welcome_email(user)
+
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            "action": action,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "avatar_url": user.avatar_url,
+            },
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        }, status=status.HTTP_200_OK if action == "login_required" else status.HTTP_201_CREATED)
+
 
