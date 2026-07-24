@@ -53,7 +53,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'apps.register',
     'apps.login',
-    'apps.docs'
+    'apps.docs',
+    'apps.profiles'
 ]
 
 MIDDLEWARE = [
