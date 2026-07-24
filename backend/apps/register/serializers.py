@@ -78,7 +78,7 @@ class CheckEmailSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
 
-class GoogleRegisterSerializer(serializers.Serializer):
+class GoogleAuthSerializer(serializers.Serializer):
     google_token = serializers.CharField(write_only=True)
 
 
