@@ -18,11 +18,19 @@ class RegisterView(APIView):
         user = serializer.save()
         send_welcome_email(user)
 
-        return Response(
-            serializer.data,
-            status=status.HTTP_201_CREATED,
-        )
+        refresh = RefreshToken.for_user(user)
 
+        return Response({
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+            },
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        }, status=status.HTTP_201_CREATED)
 
 User = get_user_model()
 
