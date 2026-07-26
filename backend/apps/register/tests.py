@@ -382,7 +382,7 @@ class VerifyEmailViewTests(APITestCase):
 class GoogleRegisterViewTests(APITestCase):
 
     def setUp(self):
-        self.url = reverse("google-auth")
+        self.url = reverse("google-register")
 
         self.payload = {
             "sub": "google-user-123",
@@ -710,4 +710,5 @@ class GoogleTokenServiceTests(APITestCase):
         )
 
         self.assertIsNone(result)
+
 

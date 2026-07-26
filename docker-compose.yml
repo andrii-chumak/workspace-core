@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    env_file: .env
+    env_file: ./backend/.env
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -16,7 +16,7 @@ services:
 
   backend:
     build: ./backend
-    env_file: .env
+    env_file: ./backend/.env
     volumes:
       - ./backend:/app
     ports:
@@ -24,6 +24,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
 
 
 volumes:
