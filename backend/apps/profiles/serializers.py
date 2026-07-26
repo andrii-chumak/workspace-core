@@ -13,6 +13,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def validate_username(self, value):
         user = self.context['request'].user
+        if user.username.lower() == value.lower():
+            return value
         if User.objects.exclude(pk=user.pk).filter(username__iexact=value).exists():
             raise serializers.ValidationError("This username is already taken.")
         return value
