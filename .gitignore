@@ -9,8 +9,8 @@ __pycache__/
 backend/.coverage
 
 #env_file
-.env
 backend/.env
+.env
 
 # Distribution / packaging
 .Python

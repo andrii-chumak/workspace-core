@@ -8,7 +8,7 @@ from .services import generate_email_verification_token, verify_email_verificati
 
 
 from django.contrib.auth import get_user_model
-from .serializers import RegisterSerializer, CheckEmailSerializer, GoogleAuthSerializer
+from .serializers import RegisterSerializer, CheckEmailSerializer, GoogleRegisterSerializer
 
 class RegisterView(APIView):
     def post(self, request):
@@ -18,19 +18,11 @@ class RegisterView(APIView):
         user = serializer.save()
         send_welcome_email(user)
 
-        refresh = RefreshToken.for_user(user)
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED,
+        )
 
-        return Response({
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-            },
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-        }, status=status.HTTP_201_CREATED)
 
 User = get_user_model()
 
@@ -80,9 +72,9 @@ class VerifyEmailView(APIView):
             }, status=status.HTTP_200_OK
         )
 
-class GoogleAuthView(APIView):
+class GoogleRegisterView(APIView):
     def post(self, request):
-        serializer = GoogleAuthSerializer(data=request.data)
+        serializer = GoogleRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         action = serializer.action
