@@ -2,6 +2,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.utils import extend_schema
 
 from .services import generate_email_verification_token, verify_email_verification_token, send_verification_email, send_welcome_email
 
@@ -10,6 +11,7 @@ from .services import generate_email_verification_token, verify_email_verificati
 from django.contrib.auth import get_user_model
 from .serializers import RegisterSerializer, CheckEmailSerializer, GoogleAuthSerializer
 
+@extend_schema(auth=[])
 class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -35,7 +37,7 @@ class RegisterView(APIView):
 User = get_user_model()
 
 
-
+@extend_schema(auth=[])
 class CheckEmailView(APIView):
     def get(self, request):
         serializer = CheckEmailSerializer(data=request.query_params)
@@ -54,7 +56,7 @@ class CheckEmailView(APIView):
             "available": not exists,
             })
 
-
+@extend_schema(auth=[])
 class VerifyEmailView(APIView):
     def get(self, request):
         token = request.query_params.get("token")
@@ -80,6 +82,7 @@ class VerifyEmailView(APIView):
             }, status=status.HTTP_200_OK
         )
 
+@extend_schema(auth=[])
 class GoogleAuthView(APIView):
     def post(self, request):
         serializer = GoogleAuthSerializer(data=request.data)

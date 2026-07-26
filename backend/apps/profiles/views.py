@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
+from drf_spectacular.utils import extend_schema
 
 from .serializers import UserProfileSerializer, ConfirmPasswordChangeSerializer
 from .services import (
@@ -13,7 +14,7 @@ from .services import (
 
 User = get_user_model()
 
-
+@extend_schema(auth=[])
 class UserProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
@@ -21,7 +22,7 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return self.request.user
 
-
+@extend_schema(auth=[])
 class RequestPasswordChangeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -35,7 +36,7 @@ class RequestPasswordChangeView(APIView):
             status=status.HTTP_200_OK,
         )
 
-
+@extend_schema(auth=[])
 class ConfirmPasswordChangeView(APIView):
     permission_classes = [IsAuthenticated]
 
