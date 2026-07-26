@@ -59,6 +59,7 @@ def send_verification_email(email, token):
     )
     message.attach(image)
     message.send()
+    print(f"\n--- CLEAN TOKEN: {token} ---\n")
 
 
 def send_welcome_email(user):
