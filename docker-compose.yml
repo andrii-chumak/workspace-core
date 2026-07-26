@@ -26,6 +26,5 @@ services:
         condition: service_healthy
 
 
-
 volumes:
   postgres_data:
