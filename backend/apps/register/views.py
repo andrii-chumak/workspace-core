@@ -2,17 +2,21 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from rest_framework.permissions import AllowAny
 
 from .services import generate_email_verification_token, verify_email_verification_token, send_verification_email, send_welcome_email
-
-
 
 from django.contrib.auth import get_user_model
 from .serializers import RegisterSerializer, CheckEmailSerializer, GoogleAuthSerializer
 
-@extend_schema(auth=[])
+@extend_schema(
+    auth=[],
+    request=RegisterSerializer,
+    responses={201: None}
+)
 class RegisterView(APIView):
+    permission_classes = [AllowAny]
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -37,8 +41,13 @@ class RegisterView(APIView):
 User = get_user_model()
 
 
-@extend_schema(auth=[])
+@extend_schema(
+    auth=[],
+    parameters=[CheckEmailSerializer],
+    responses={200: None}
+)
 class CheckEmailView(APIView):
+    permission_classes = [AllowAny]
     def get(self, request):
         serializer = CheckEmailSerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
@@ -56,8 +65,21 @@ class CheckEmailView(APIView):
             "available": not exists,
             })
 
-@extend_schema(auth=[])
+@extend_schema(
+    auth=[],
+    parameters=[
+        OpenApiParameter(
+            name='token',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=True,
+            description='Email verification token'
+        )
+    ],
+    responses={200: None}
+)
 class VerifyEmailView(APIView):
+    permission_classes = [AllowAny]
     def get(self, request):
         token = request.query_params.get("token")
         if token is None:
@@ -82,8 +104,13 @@ class VerifyEmailView(APIView):
             }, status=status.HTTP_200_OK
         )
 
-@extend_schema(auth=[])
+@extend_schema(
+    auth=[],
+    request=GoogleAuthSerializer,
+    responses={200: None}
+)
 class GoogleAuthView(APIView):
+    permission_classes = [AllowAny]
     def post(self, request):
         serializer = GoogleAuthSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

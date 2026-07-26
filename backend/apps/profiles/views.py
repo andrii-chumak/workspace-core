@@ -14,7 +14,8 @@ from .services import (
 
 User = get_user_model()
 
-@extend_schema(auth=[])
+
+@extend_schema(summary="Get or update user profile")
 class UserProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
@@ -22,7 +23,12 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return self.request.user
 
-@extend_schema(auth=[])
+
+@extend_schema(
+    summary="Request password change email token",
+    request=None,
+    responses={200: UserProfileSerializer}
+)
 class RequestPasswordChangeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -36,7 +42,12 @@ class RequestPasswordChangeView(APIView):
             status=status.HTTP_200_OK,
         )
 
-@extend_schema(auth=[])
+
+@extend_schema(
+    summary="Confirm password change with token",
+    request=ConfirmPasswordChangeSerializer,
+    responses={200: None}
+)
 class ConfirmPasswordChangeView(APIView):
     permission_classes = [IsAuthenticated]
 

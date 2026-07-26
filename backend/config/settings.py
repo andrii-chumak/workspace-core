@@ -144,15 +144,21 @@ SPECTACULAR_SETTINGS = {
     'TITLE': 'API Service',
     'DESCRIPTION': 'API Service description',
     'VERSION': '1.0.0',
-    'SERVICE_INCLUDE_SCHEMA': False,
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
     'SECURITY': [{'BearerAuth': []}],
     'SECURITY_DEFINITIONS': {
         'BearerAuth': {
             'type': 'apiKey',
             'in': 'header',
             'name': 'Authorization',
-            'description': 'Token format: Bearer <JWT_ACCESS_TOKEN>',
+            'description': 'Enter token with Bearer prefix, e.g. "Bearer <your_token>"'
         }
+    },
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
     },
 }
 
