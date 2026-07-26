@@ -1,4 +1,3 @@
-from dulwich import attrs
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth import password_validation
@@ -78,7 +77,7 @@ class CheckEmailSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
 
-class GoogleRegisterSerializer(serializers.Serializer):
+class GoogleAuthSerializer(serializers.Serializer):
     google_token = serializers.CharField(write_only=True)
 
 
