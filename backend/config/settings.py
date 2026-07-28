@@ -55,7 +55,8 @@ INSTALLED_APPS = [
     'apps.register',
     'apps.login',
     'apps.docs',
-    'apps.profiles'
+    'apps.profiles',
+    'apps.workspace',
 ]
 
 MIDDLEWARE = [
