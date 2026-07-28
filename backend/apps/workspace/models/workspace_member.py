@@ -14,7 +14,7 @@ class WorkspaceMember(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name = "workspace_users"
+        related_name = "workspace_member_users"
     )
 
     class Role(models.TextChoices):
@@ -33,7 +33,7 @@ class WorkspaceMember(models.Model):
             ),
             models.UniqueConstraint(
                 fields = ["workspace"],
-                condition=Q(role="Owner"),
-                name = "unique_workspace_member",
+                condition=Q(role="owner"),
+                name = "unique_workspace_owner",
             ),
         ]
