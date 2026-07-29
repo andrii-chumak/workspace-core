@@ -3,6 +3,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.workspace.models import Workspace, WorkspaceMember
+
 from .models import Project, ProjectMember
 
 User = get_user_model()
@@ -25,13 +27,27 @@ class ProjectApiTests(APITestCase):
             email="outsider@example.com",
             password="Password12345!",
         )
+        self.workspace = Workspace.objects.create(
+            name="Engineering",
+            description="Workspace for project tests",
+        )
+        WorkspaceMember.objects.create(
+            workspace=self.workspace,
+            user=self.owner,
+            role=WorkspaceMember.Role.OWNER,
+        )
+        WorkspaceMember.objects.create(
+            workspace=self.workspace,
+            user=self.member,
+            role=WorkspaceMember.Role.MEMBER,
+        )
         self.client.force_authenticate(self.owner)
 
     def test_create_project_adds_creator_as_product_owner(self):
         response = self.client.post(
             reverse("project-list"),
             {
-                "workspace_id": 10,
+                "workspace_id": self.workspace.id,
                 "name": "Core API",
                 "description": "Project backend",
                 "methodology": Project.Methodology.SCRUM,
@@ -52,7 +68,7 @@ class ProjectApiTests(APITestCase):
 
     def test_member_can_read_but_not_update_project(self):
         project = Project.objects.create(
-            workspace_id=10,
+            workspace=self.workspace,
             name="Core API",
             created_by=self.owner,
         )
@@ -69,7 +85,7 @@ class ProjectApiTests(APITestCase):
 
     def test_outsider_cannot_read_project(self):
         project = Project.objects.create(
-            workspace_id=10,
+            workspace=self.workspace,
             name="Core API",
             created_by=self.owner,
         )
@@ -81,7 +97,7 @@ class ProjectApiTests(APITestCase):
 
     def test_owner_can_add_and_remove_member(self):
         project = Project.objects.create(
-            workspace_id=10,
+            workspace=self.workspace,
             name="Core API",
             created_by=self.owner,
         )
@@ -110,7 +126,7 @@ class ProjectApiTests(APITestCase):
 
     def test_owner_can_delete_project_completely(self):
         project = Project.objects.create(
-            workspace_id=10,
+            workspace=self.workspace,
             name="Core API",
             created_by=self.owner,
         )
@@ -127,7 +143,7 @@ class ProjectApiTests(APITestCase):
 
     def test_member_cannot_delete_project(self):
         project = Project.objects.create(
-            workspace_id=10,
+            workspace=self.workspace,
             name="Core API",
             created_by=self.owner,
         )
@@ -141,7 +157,7 @@ class ProjectApiTests(APITestCase):
 
     def test_archive_and_restore_project(self):
         project = Project.objects.create(
-            workspace_id=10,
+            workspace=self.workspace,
             name="Core API",
             created_by=self.owner,
         )
@@ -164,3 +180,38 @@ class ProjectApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(project.status, Project.Status.ACTIVE)
+
+    def test_workspace_member_cannot_create_project(self):
+        self.client.force_authenticate(self.member)
+
+        response = self.client.post(
+            reverse("project-list"),
+            {
+                "workspace_id": self.workspace.id,
+                "name": "Member Project",
+                "methodology": Project.Methodology.KANBAN,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_project_member_must_belong_to_workspace(self):
+        project = Project.objects.create(
+            workspace=self.workspace,
+            name="Core API",
+            created_by=self.owner,
+        )
+        ProjectMember.objects.create(
+            project=project,
+            user=self.owner,
+            role=ProjectMember.Role.PRODUCT_OWNER,
+        )
+
+        response = self.client.post(
+            reverse("project-members", args=[project.id]),
+            {"user_id": self.outsider.id, "role": ProjectMember.Role.TEAM_MEMBER},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

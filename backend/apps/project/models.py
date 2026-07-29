@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from apps.workspace.models import Workspace
+
 
 class Project(models.Model):
     class Methodology(models.TextChoices):
@@ -11,7 +13,11 @@ class Project(models.Model):
         ACTIVE = "active", "Active"
         ARCHIVED = "archived", "Archived"
 
-    workspace_id = models.PositiveBigIntegerField(db_index=True)
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        related_name="projects",
+    )
     name = models.CharField(max_length=150)
     description = models.TextField(blank=True)
     methodology = models.CharField(
@@ -39,12 +45,12 @@ class Project(models.Model):
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["workspace_id", "name"],
+                fields=["workspace", "name"],
                 name="unique_project_name_per_workspace",
             ),
         ]
         indexes = [
-            models.Index(fields=["workspace_id", "status"]),
+            models.Index(fields=["workspace", "status"]),
         ]
 
     def __str__(self):

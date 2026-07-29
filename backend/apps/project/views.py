@@ -1,8 +1,11 @@
 from django.db.models import Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+from apps.workspace.models import Workspace, WorkspaceMember
 
 from .models import Project, ProjectMember
 from .permissions import IsProjectMember, can_manage_project
@@ -21,9 +24,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = (
-            Project.objects.select_related("created_by")
+            Project.objects.select_related("created_by", "workspace")
             .prefetch_related("members__user")
-            .filter(Q(created_by=self.request.user) | Q(members__user=self.request.user))
+            .filter(
+                Q(workspace__workspace_members__user=self.request.user)
+                | Q(created_by=self.request.user)
+                | Q(members__user=self.request.user)
+            )
             .distinct()
         )
 
@@ -47,18 +54,24 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         project = self.get_object()
+        if project.workspace.status == Workspace.Status.ARCHIVED:
+            raise ValidationError({"workspace": "Archived workspace cannot be modified."})
         if not can_manage_project(request.user, project):
             return Response(status=status.HTTP_403_FORBIDDEN)
         return super().update(request, *args, **kwargs)
 
     def partial_update(self, request, *args, **kwargs):
         project = self.get_object()
+        if project.workspace.status == Workspace.Status.ARCHIVED:
+            raise ValidationError({"workspace": "Archived workspace cannot be modified."})
         if not can_manage_project(request.user, project):
             return Response(status=status.HTTP_403_FORBIDDEN)
         return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         project = self.get_object()
+        if project.workspace.status == Workspace.Status.ARCHIVED:
+            raise ValidationError({"workspace": "Archived workspace cannot be modified."})
         if project.created_by_id != request.user.id:
             return Response(
                 {"detail": "Only the project creator can permanently delete the project."},
@@ -71,6 +84,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def archive(self, request, pk=None):
         project = self.get_object()
+        if project.workspace.status == Workspace.Status.ARCHIVED:
+            raise ValidationError({"workspace": "Archived workspace cannot be modified."})
         if not can_manage_project(request.user, project):
             return Response(status=status.HTTP_403_FORBIDDEN)
         project.archive()
@@ -79,6 +94,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
         project = self.get_object()
+        if project.workspace.status == Workspace.Status.ARCHIVED:
+            raise ValidationError({"workspace": "Archived workspace cannot be modified."})
         if not can_manage_project(request.user, project):
             return Response(status=status.HTTP_403_FORBIDDEN)
         project.restore()
@@ -106,6 +123,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
         serializer = ProjectMemberSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        if not WorkspaceMember.objects.filter(
+            workspace=project.workspace,
+            user=serializer.validated_data["user"],
+        ).exists():
+            raise ValidationError({
+                "user_id": "User must be a member of the project workspace."
+            })
         membership, created = ProjectMember.objects.update_or_create(
             project=project,
             user=serializer.validated_data["user"],
@@ -120,6 +144,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["delete"], url_path=r"members/(?P<user_id>\d+)")
     def remove_member(self, request, pk=None, user_id=None):
         project = self.get_object()
+        if project.workspace.status == Workspace.Status.ARCHIVED:
+            raise ValidationError({"workspace": "Archived workspace cannot be modified."})
         if not can_manage_project(request.user, project):
             return Response(status=status.HTTP_403_FORBIDDEN)
         if int(user_id) == project.created_by_id:
