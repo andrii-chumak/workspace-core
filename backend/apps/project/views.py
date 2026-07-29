@@ -1,15 +1,22 @@
 from django.db.models import Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.workspace.models import Workspace, WorkspaceMember
 
-from .models import Project, ProjectMember
+from .models import Kanban, Project, ProjectMember, Scrum, Sprint, SprintEvent
 from .permissions import IsProjectMember, can_manage_project
-from .serializers import ProjectMemberSerializer, ProjectSerializer
+from .serializers import (
+    KanbanSerializer,
+    ProjectMemberSerializer,
+    ProjectSerializer,
+    ScrumSerializer,
+    SprintEventSerializer,
+    SprintSerializer,
+)
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 
 @extend_schema(
@@ -51,6 +58,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
             user=self.request.user,
             defaults={"role": ProjectMember.Role.PRODUCT_OWNER},
         )
+        if project.methodology == Project.Methodology.SCRUM:
+            Scrum.objects.get_or_create(project=project)
+        if project.methodology == Project.Methodology.KANBAN:
+            Kanban.objects.get_or_create(project=project)
 
     def update(self, request, *args, **kwargs):
         project = self.get_object()
@@ -158,3 +169,243 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return Response(
             status=status.HTTP_204_NO_CONTENT if deleted else status.HTTP_404_NOT_FOUND
         )
+
+
+def ensure_project_can_be_managed(user, project):
+    if project.workspace.status == Workspace.Status.ARCHIVED:
+        raise ValidationError({"workspace": "Archived workspace cannot be modified."})
+    if project.status == Project.Status.ARCHIVED:
+        raise ValidationError({"project": "Archived project cannot be modified."})
+    if not can_manage_project(user, project):
+        return Response(status=status.HTTP_403_FORBIDDEN)
+    return None
+
+
+class ScrumViewSet(viewsets.ModelViewSet):
+    serializer_class = ScrumSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Scrum.objects.select_related(
+            "project",
+            "project__workspace",
+            "current_sprint",
+        ).filter(
+            Q(project__workspace__workspace_members__user=self.request.user)
+            | Q(project__members__user=self.request.user)
+            | Q(project__created_by=self.request.user)
+        ).distinct()
+
+        project_id = self.request.query_params.get("project_id")
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        project = serializer.validated_data["project"]
+        denied = ensure_project_can_be_managed(self.request.user, project)
+        if denied is not None:
+            raise PermissionDenied("You cannot manage this project.")
+        serializer.save()
+
+    def update(self, request, *args, **kwargs):
+        scrum = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, scrum.project)
+        if denied is not None:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        scrum = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, scrum.project)
+        if denied is not None:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "Scrum settings cannot be deleted separately from the project."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+
+class KanbanViewSet(viewsets.ModelViewSet):
+    serializer_class = KanbanSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Kanban.objects.select_related(
+            "project",
+            "project__workspace",
+        ).filter(
+            Q(project__workspace__workspace_members__user=self.request.user)
+            | Q(project__members__user=self.request.user)
+            | Q(project__created_by=self.request.user)
+        ).distinct()
+
+        project_id = self.request.query_params.get("project_id")
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        project = serializer.validated_data["project"]
+        denied = ensure_project_can_be_managed(self.request.user, project)
+        if denied is not None:
+            raise PermissionDenied("You cannot manage this project.")
+        serializer.save()
+
+    def update(self, request, *args, **kwargs):
+        kanban = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, kanban.project)
+        if denied is not None:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        kanban = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, kanban.project)
+        if denied is not None:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "Kanban settings cannot be deleted separately from the project."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+
+class SprintViewSet(viewsets.ModelViewSet):
+    serializer_class = SprintSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Sprint.objects.select_related(
+            "scrum",
+            "scrum__project",
+            "scrum__project__workspace",
+        ).filter(
+            Q(scrum__project__workspace__workspace_members__user=self.request.user)
+            | Q(scrum__project__members__user=self.request.user)
+            | Q(scrum__project__created_by=self.request.user)
+        ).distinct()
+
+        scrum_id = self.request.query_params.get("scrum_id")
+        if scrum_id:
+            queryset = queryset.filter(scrum_id=scrum_id)
+
+        project_id = self.request.query_params.get("project_id")
+        if project_id:
+            queryset = queryset.filter(scrum__project_id=project_id)
+
+        sprint_status = self.request.query_params.get("status")
+        if sprint_status:
+            queryset = queryset.filter(status=sprint_status)
+        return queryset
+
+    def perform_create(self, serializer):
+        scrum = serializer.validated_data["scrum"]
+        denied = ensure_project_can_be_managed(self.request.user, scrum.project)
+        if denied is not None:
+            raise PermissionDenied("You cannot manage this project.")
+        serializer.save()
+
+    def update(self, request, *args, **kwargs):
+        sprint = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, sprint.scrum.project)
+        if denied is not None:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        sprint = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, sprint.scrum.project)
+        if denied is not None:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        sprint = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, sprint.scrum.project)
+        if denied is not None:
+            return denied
+        sprint.archive()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"])
+    def start(self, request, pk=None):
+        sprint = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, sprint.scrum.project)
+        if denied is not None:
+            return denied
+        sprint.start()
+        return Response(self.get_serializer(sprint).data)
+
+    @action(detail=True, methods=["post"])
+    def complete(self, request, pk=None):
+        sprint = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, sprint.scrum.project)
+        if denied is not None:
+            return denied
+        sprint.complete()
+        return Response(self.get_serializer(sprint).data)
+
+    @action(detail=True, methods=["post"])
+    def archive(self, request, pk=None):
+        sprint = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, sprint.scrum.project)
+        if denied is not None:
+            return denied
+        sprint.archive()
+        return Response(self.get_serializer(sprint).data)
+
+
+class SprintEventViewSet(viewsets.ModelViewSet):
+    serializer_class = SprintEventSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = SprintEvent.objects.select_related(
+            "sprint",
+            "sprint__scrum",
+            "sprint__scrum__project",
+            "sprint__scrum__project__workspace",
+        ).filter(
+            Q(sprint__scrum__project__workspace__workspace_members__user=self.request.user)
+            | Q(sprint__scrum__project__members__user=self.request.user)
+            | Q(sprint__scrum__project__created_by=self.request.user)
+        ).distinct()
+
+        sprint_id = self.request.query_params.get("sprint_id")
+        if sprint_id:
+            queryset = queryset.filter(sprint_id=sprint_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        sprint = serializer.validated_data["sprint"]
+        denied = ensure_project_can_be_managed(self.request.user, sprint.scrum.project)
+        if denied is not None:
+            raise PermissionDenied("You cannot manage this project.")
+        serializer.save()
+
+    def update(self, request, *args, **kwargs):
+        event = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, event.sprint.scrum.project)
+        if denied is not None:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        event = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, event.sprint.scrum.project)
+        if denied is not None:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        event = self.get_object()
+        denied = ensure_project_can_be_managed(request.user, event.sprint.scrum.project)
+        if denied is not None:
+            return denied
+        return super().destroy(request, *args, **kwargs)
