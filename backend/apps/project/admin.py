@@ -20,7 +20,11 @@ class ProjectAdmin(admin.ModelAdmin):
 class ProjectMemberAdmin(admin.ModelAdmin):
     list_display = ("id", "project", "workspace_member", "role", "joined_at")
     list_filter = ("role",)
-    search_fields = ("project__name", "user__username", "user__email")
+    search_fields = (
+        "project__name",
+        "workspace_member__user__username",
+        "workspace_member__user__email",
+    )
 
 
 @admin.register(Scrum)

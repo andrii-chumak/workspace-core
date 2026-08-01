@@ -2,7 +2,6 @@ from django.conf import settings
 from django.db import models
 
 from apps.workspace.models import Workspace
-
 from apps.workspace.models import WorkspaceMember
 
 
@@ -103,7 +102,7 @@ class ProjectMember(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.user_id} in project {self.project_id}"
+        return f"{self.workspace_member_id} in project {self.project_id}"
 
 
 class Scrum(models.Model):

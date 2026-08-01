@@ -38,7 +38,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
             .filter(
                 Q(workspace__workspace_members__user=user,
                   workspace__workspace_members__role__in=[WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN])
-                | Q(created_by=user)
                 | Q(members__workspace_member__user=user)
             )
             .distinct()
@@ -223,7 +222,6 @@ class ScrumViewSet(viewsets.ModelViewSet):
             "current_sprint",
         ).filter(
             Q(project__workspace__workspace_members__user=user, project__workspace__workspace_members__role__in=[WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN])
-            | Q(project__created_by=user)
             | Q(project__members__workspace_member__user=user)
         ).distinct()
 
@@ -271,7 +269,6 @@ class KanbanViewSet(viewsets.ModelViewSet):
             "project__workspace",
         ).filter(
             Q(project__workspace__workspace_members__user=user, project__workspace__workspace_members__role__in=[WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN])
-            | Q(project__created_by=user)
             | Q(project__members__workspace_member__user=user)
         ).distinct()
 
@@ -320,7 +317,6 @@ class SprintViewSet(viewsets.ModelViewSet):
             "scrum__project__workspace",
         ).filter(
             Q(scrum__project__workspace__workspace_members__user=user, scrum__project__workspace__workspace_members__role__in=[WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN])
-            | Q(scrum__project__created_by=user)
             | Q(scrum__project__members__workspace_member__user=user)
         ).distinct()
 
@@ -407,7 +403,6 @@ class SprintEventViewSet(viewsets.ModelViewSet):
             "sprint__scrum__project__workspace",
         ).filter(
             Q(sprint__scrum__project__workspace__workspace_members__user=user, sprint__scrum__project__workspace__workspace_members__role__in=[WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN])
-            | Q(sprint__scrum__project__created_by=user)
             | Q(sprint__scrum__project__members__workspace_member__user=user)
         ).distinct()
 
