@@ -3,6 +3,8 @@ from django.db import models
 
 from apps.workspace.models import Workspace
 
+from apps.workspace.models import WorkspaceMember
+
 
 class Project(models.Model):
     class Methodology(models.TextChoices):
@@ -76,8 +78,8 @@ class ProjectMember(models.Model):
         on_delete=models.CASCADE,
         related_name="members",
     )
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+    workspace_member = models.ForeignKey(
+        WorkspaceMember,
         on_delete=models.CASCADE,
         related_name="project_memberships",
     )
@@ -92,7 +94,7 @@ class ProjectMember(models.Model):
         db_table = "project_members"
         constraints = [
             models.UniqueConstraint(
-                fields=["project", "user"],
+                fields=["project", "workspace_member"],
                 name="unique_project_member",
             ),
         ]

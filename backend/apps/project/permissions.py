@@ -14,25 +14,33 @@ MANAGER_ROLES = {
 def can_manage_project(user, project):
     if not user or not user.is_authenticated:
         return False
+
     if WorkspaceMember.objects.filter(
-        workspace=project.workspace,
-        user=user,
-        role__in=(WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN),
+            workspace=project.workspace,
+            user=user,
+            role__in=(WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN),
     ).exists():
         return True
-    if project.created_by_id == user.id:
-        return True
+
     return ProjectMember.objects.filter(
         project=project,
-        user=user,
+        workspace_member__user=user,
         role__in=MANAGER_ROLES,
     ).exists()
 
 
 class IsProjectMember(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
-        if obj.workspace.workspace_members.filter(user=request.user).exists():
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        if obj.workspace.workspace_members.filter(
+            user=request.user,
+            role__in=(WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN)
+        ).exists():
             return True
+
         if obj.created_by_id == request.user.id:
             return True
-        return obj.members.filter(user=request.user).exists()
+
+        return obj.members.filter(workspace_member__user=request.user).exists()

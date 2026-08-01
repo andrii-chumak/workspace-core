@@ -32,12 +32,12 @@ class ProjectApiTests(APITestCase):
             name="Engineering",
             description="Workspace for project tests",
         )
-        WorkspaceMember.objects.create(
+        self.owner_wm = WorkspaceMember.objects.create(
             workspace=self.workspace,
             user=self.owner,
             role=WorkspaceMember.Role.OWNER,
         )
-        WorkspaceMember.objects.create(
+        self.member_wm = WorkspaceMember.objects.create(
             workspace=self.workspace,
             user=self.member,
             role=WorkspaceMember.Role.MEMBER,
@@ -62,7 +62,7 @@ class ProjectApiTests(APITestCase):
         self.assertTrue(
             ProjectMember.objects.filter(
                 project=project,
-                user=self.owner,
+                workspace_member=self.owner_wm,
                 role=ProjectMember.Role.PRODUCT_OWNER,
             ).exists()
         )
@@ -92,7 +92,7 @@ class ProjectApiTests(APITestCase):
         )
         ProjectMember.objects.create(
             project=project,
-            user=self.owner,
+            workspace_member=self.owner_wm,
             role=ProjectMember.Role.PRODUCT_OWNER,
         )
 
@@ -110,7 +110,7 @@ class ProjectApiTests(APITestCase):
             name="Core API",
             created_by=self.owner,
         )
-        ProjectMember.objects.create(project=project, user=self.member)
+        ProjectMember.objects.create(project=project, workspace_member=self.member_wm)
 
         self.client.force_authenticate(self.member)
         detail_url = reverse("project-detail", args=[project.id])
@@ -141,7 +141,7 @@ class ProjectApiTests(APITestCase):
         )
         ProjectMember.objects.create(
             project=project,
-            user=self.owner,
+            workspace_member=self.owner_wm,
             role=ProjectMember.Role.PRODUCT_OWNER,
         )
 
@@ -153,14 +153,14 @@ class ProjectApiTests(APITestCase):
         )
 
         self.assertEqual(add_response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(project.members.filter(user=self.member).exists())
+        self.assertTrue(project.members.filter(workspace_member=self.member_wm).exists())
 
         remove_response = self.client.delete(
             reverse("project-remove-member", args=[project.id, self.member.id])
         )
 
         self.assertEqual(remove_response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(project.members.filter(user=self.member).exists())
+        self.assertFalse(project.members.filter(workspace_member=self.member_wm).exists())
 
     def test_owner_can_delete_project_completely(self):
         project = Project.objects.create(
@@ -170,7 +170,7 @@ class ProjectApiTests(APITestCase):
         )
         ProjectMember.objects.create(
             project=project,
-            user=self.owner,
+            workspace_member=self.owner_wm,
             role=ProjectMember.Role.PRODUCT_OWNER,
         )
 
@@ -185,7 +185,7 @@ class ProjectApiTests(APITestCase):
             name="Core API",
             created_by=self.owner,
         )
-        ProjectMember.objects.create(project=project, user=self.member, role=ProjectMember.Role.SCRUM_MASTER)
+        ProjectMember.objects.create(project=project, workspace_member=self.member_wm, role=ProjectMember.Role.SCRUM_MASTER)
 
         self.client.force_authenticate(self.member)
         response = self.client.delete(reverse("project-detail", args=[project.id]))
@@ -201,7 +201,7 @@ class ProjectApiTests(APITestCase):
         )
         ProjectMember.objects.create(
             project=project,
-            user=self.owner,
+            workspace_member=self.owner_wm,
             role=ProjectMember.Role.PRODUCT_OWNER,
         )
 
@@ -242,7 +242,7 @@ class ProjectApiTests(APITestCase):
         )
         ProjectMember.objects.create(
             project=project,
-            user=self.owner,
+            workspace_member=self.owner_wm,
             role=ProjectMember.Role.PRODUCT_OWNER,
         )
 
@@ -264,7 +264,7 @@ class ProjectApiTests(APITestCase):
         kanban = Kanban.objects.create(project=project)
         ProjectMember.objects.create(
             project=project,
-            user=self.owner,
+            workspace_member=self.owner_wm,
             role=ProjectMember.Role.PRODUCT_OWNER,
         )
 
@@ -289,7 +289,7 @@ class ProjectApiTests(APITestCase):
         scrum = Scrum.objects.create(project=project)
         ProjectMember.objects.create(
             project=project,
-            user=self.owner,
+            workspace_member=self.owner_wm,
             role=ProjectMember.Role.PRODUCT_OWNER,
         )
         start_date = timezone.now()
@@ -341,7 +341,7 @@ class ProjectApiTests(APITestCase):
             created_by=self.owner,
         )
         scrum = Scrum.objects.create(project=project)
-        ProjectMember.objects.create(project=project, user=self.member)
+        ProjectMember.objects.create(project=project, workspace_member=self.member_wm)
         self.client.force_authenticate(self.member)
         start_date = timezone.now()
 
@@ -374,7 +374,7 @@ class ProjectApiTests(APITestCase):
         )
         ProjectMember.objects.create(
             project=project,
-            user=self.owner,
+            workspace_member=self.owner_wm,
             role=ProjectMember.Role.PRODUCT_OWNER,
         )
 

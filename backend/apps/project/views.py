@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.db import transaction
 
 from apps.workspace.models import Workspace, WorkspaceMember
 
@@ -30,13 +31,15 @@ class ProjectViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsProjectMember]
 
     def get_queryset(self):
+        user = self.request.user
         queryset = (
             Project.objects.select_related("created_by", "workspace")
-            .prefetch_related("members__user")
+            .prefetch_related("members__workspace_member__user")
             .filter(
-                Q(workspace__workspace_members__user=self.request.user)
-                | Q(created_by=self.request.user)
-                | Q(members__user=self.request.user)
+                Q(workspace__workspace_members__user=user,
+                  workspace__workspace_members__role__in=[WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN])
+                | Q(created_by=user)
+                | Q(members__workspace_member__user=user)
             )
             .distinct()
         )
@@ -51,11 +54,18 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    @transaction.atomic
     def perform_create(self, serializer):
         project = serializer.save(created_by=self.request.user)
+
+        workspace_member, _ = WorkspaceMember.objects.get_or_create(
+            workspace=project.workspace,
+            user=self.request.user,
+        )
+
         ProjectMember.objects.get_or_create(
             project=project,
-            user=self.request.user,
+            workspace_member=workspace_member,
             defaults={"role": ProjectMember.Role.PRODUCT_OWNER},
         )
         if project.methodology == Project.Methodology.SCRUM:
@@ -83,13 +93,28 @@ class ProjectViewSet(viewsets.ModelViewSet):
         project = self.get_object()
         if project.workspace.status == Workspace.Status.ARCHIVED:
             raise ValidationError({"workspace": "Archived workspace cannot be modified."})
-        if project.created_by_id != request.user.id:
+
+        is_workspace_owner_or_admin = WorkspaceMember.objects.filter(
+            workspace=project.workspace,
+            user=request.user,
+            role__in=(WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN)
+        ).exists()
+
+        is_project_po = ProjectMember.objects.filter(
+            project=project,
+            workspace_member__user=request.user,
+            role=ProjectMember.Role.PRODUCT_OWNER
+        ).exists()
+
+        if not (is_workspace_owner_or_admin or is_project_po):
             return Response(
-                {"detail": "Only the project creator can permanently delete the project."},
+                {"detail": "Only Workspace owner/admin or Project Product Owner can permanently delete the project."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
         if not can_manage_project(request.user, project):
             return Response(status=status.HTTP_403_FORBIDDEN)
+
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=["post"])
@@ -126,25 +151,30 @@ class ProjectViewSet(viewsets.ModelViewSet):
         project = self.get_object()
 
         if request.method == "GET":
-            serializer = ProjectMemberSerializer(project.members.select_related("user"), many=True)
+            serializer = ProjectMemberSerializer(project.members.select_related("workspace_member__user"), many=True)
             return Response(serializer.data)
 
         if not can_manage_project(request.user, project):
             return Response(status=status.HTTP_403_FORBIDDEN)
 
-        serializer = ProjectMemberSerializer(data=request.data)
+        serializer = ProjectMemberSerializer(data=request.data, context={"view": self, "request": request})
         serializer.is_valid(raise_exception=True)
-        if not WorkspaceMember.objects.filter(
+
+        user = serializer.validated_data.get("user_id")
+        workspace_member = WorkspaceMember.objects.filter(
             workspace=project.workspace,
-            user=serializer.validated_data["user"],
-        ).exists():
+            user=user,
+        ).first()
+
+        if not workspace_member:
             raise ValidationError({
                 "user_id": "User must be a member of the project workspace."
             })
+
         membership, created = ProjectMember.objects.update_or_create(
             project=project,
-            user=serializer.validated_data["user"],
-            defaults={"role": serializer.validated_data["role"]},
+            workspace_member=workspace_member,
+            defaults={"role": serializer.validated_data.get("role", ProjectMember.Role.TEAM_MEMBER)},
         )
         response_serializer = ProjectMemberSerializer(membership)
         return Response(
@@ -165,7 +195,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        deleted, _ = project.members.filter(user_id=user_id).delete()
+        deleted, _ = project.members.filter(workspace_member__user_id=user_id).delete()
         return Response(
             status=status.HTTP_204_NO_CONTENT if deleted else status.HTTP_404_NOT_FOUND
         )
@@ -186,14 +216,15 @@ class ScrumViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        user = self.request.user
         queryset = Scrum.objects.select_related(
             "project",
             "project__workspace",
             "current_sprint",
         ).filter(
-            Q(project__workspace__workspace_members__user=self.request.user)
-            | Q(project__members__user=self.request.user)
-            | Q(project__created_by=self.request.user)
+            Q(project__workspace__workspace_members__user=user, project__workspace__workspace_members__role__in=[WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN])
+            | Q(project__created_by=user)
+            | Q(project__members__workspace_member__user=user)
         ).distinct()
 
         project_id = self.request.query_params.get("project_id")
@@ -234,13 +265,14 @@ class KanbanViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        user = self.request.user
         queryset = Kanban.objects.select_related(
             "project",
             "project__workspace",
         ).filter(
-            Q(project__workspace__workspace_members__user=self.request.user)
-            | Q(project__members__user=self.request.user)
-            | Q(project__created_by=self.request.user)
+            Q(project__workspace__workspace_members__user=user, project__workspace__workspace_members__role__in=[WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN])
+            | Q(project__created_by=user)
+            | Q(project__members__workspace_member__user=user)
         ).distinct()
 
         project_id = self.request.query_params.get("project_id")
@@ -281,14 +313,15 @@ class SprintViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        user = self.request.user
         queryset = Sprint.objects.select_related(
             "scrum",
             "scrum__project",
             "scrum__project__workspace",
         ).filter(
-            Q(scrum__project__workspace__workspace_members__user=self.request.user)
-            | Q(scrum__project__members__user=self.request.user)
-            | Q(scrum__project__created_by=self.request.user)
+            Q(scrum__project__workspace__workspace_members__user=user, scrum__project__workspace__workspace_members__role__in=[WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN])
+            | Q(scrum__project__created_by=user)
+            | Q(scrum__project__members__workspace_member__user=user)
         ).distinct()
 
         scrum_id = self.request.query_params.get("scrum_id")
@@ -366,15 +399,16 @@ class SprintEventViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        user = self.request.user
         queryset = SprintEvent.objects.select_related(
             "sprint",
             "sprint__scrum",
             "sprint__scrum__project",
             "sprint__scrum__project__workspace",
         ).filter(
-            Q(sprint__scrum__project__workspace__workspace_members__user=self.request.user)
-            | Q(sprint__scrum__project__members__user=self.request.user)
-            | Q(sprint__scrum__project__created_by=self.request.user)
+            Q(sprint__scrum__project__workspace__workspace_members__user=user, sprint__scrum__project__workspace__workspace_members__role__in=[WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN])
+            | Q(sprint__scrum__project__created_by=user)
+            | Q(sprint__scrum__project__members__workspace_member__user=user)
         ).distinct()
 
         sprint_id = self.request.query_params.get("sprint_id")

@@ -18,7 +18,7 @@ class ProjectAdmin(admin.ModelAdmin):
 
 @admin.register(ProjectMember)
 class ProjectMemberAdmin(admin.ModelAdmin):
-    list_display = ("id", "project", "user", "role", "joined_at")
+    list_display = ("id", "project", "workspace_member", "role", "joined_at")
     list_filter = ("role",)
     search_fields = ("project__name", "user__username", "user__email")
 

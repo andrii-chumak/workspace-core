@@ -17,10 +17,10 @@ class ProjectUserSerializer(serializers.ModelSerializer):
 
 
 class ProjectMemberSerializer(serializers.ModelSerializer):
-    user = ProjectUserSerializer(read_only=True)
+    user = ProjectUserSerializer(source="workspace_member.user", read_only=True)
+
     user_id = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(),
-        source="user",
         write_only=True,
     )
 
@@ -28,6 +28,30 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
         model = ProjectMember
         fields = ("id", "user", "user_id", "role", "joined_at")
         read_only_fields = ("id", "user", "joined_at")
+
+    def create(self, validated_data):
+        user = validated_data.pop("user_id")
+        project = validated_data.pop("project", None)
+
+        if not project and "view" in self.context:
+            project = self.context["view"].get_object()
+
+        workspace_member = WorkspaceMember.objects.filter(
+            workspace=project.workspace,
+            user=user
+        ).first()
+
+        if not workspace_member:
+            raise serializers.ValidationError({
+                "user_id": "User must be a member of the project workspace."
+            })
+
+        membership, _ = ProjectMember.objects.update_or_create(
+            project=project,
+            workspace_member=workspace_member,
+            defaults={"role": validated_data.get("role", ProjectMember.Role.TEAM_MEMBER)}
+        )
+        return membership
 
 
 class ProjectSerializer(serializers.ModelSerializer):
