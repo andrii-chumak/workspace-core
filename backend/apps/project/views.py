@@ -20,6 +20,8 @@ from .serializers import (
 )
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 
+from apps.board.services import create_default_board
+
 @extend_schema(
     parameters=[
         OpenApiParameter(name='workspace_id', type=OpenApiTypes.INT, location=OpenApiParameter.QUERY, required=False, description='Filter by workspace ID'),
@@ -71,6 +73,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
             Scrum.objects.get_or_create(project=project)
         if project.methodology == Project.Methodology.KANBAN:
             Kanban.objects.get_or_create(project=project)
+
+        create_default_board(project)
 
     def update(self, request, *args, **kwargs):
         project = self.get_object()
