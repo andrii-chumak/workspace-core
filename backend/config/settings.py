@@ -57,7 +57,8 @@ INSTALLED_APPS = [
     'apps.docs',
     'apps.profiles',
     'apps.workspace',
-    'apps.project'
+    'apps.project',
+    'apps.board',
 ]
 
 MIDDLEWARE = [

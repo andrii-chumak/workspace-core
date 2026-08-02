@@ -25,4 +25,5 @@ urlpatterns = [
     path('api/v1/profile/', include('apps.profiles.urls')),
     path('api/v1/workspaces/',include('apps.workspace.urls')),
     path('api/v1/projects/', include('apps.project.urls')),
+    path('api/v1/projects/',include('apps.board.urls')),
 ]
